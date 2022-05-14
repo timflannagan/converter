@@ -17,7 +17,8 @@ import (
 
 const (
 	installNamespace = "rukpak-system"
-	outputDir        = "./plain"
+	// TODO: flag to control output directory
+	outputDir = "./plain"
 )
 
 var (
@@ -27,11 +28,18 @@ var (
 func main() {
 	cmd := &cobra.Command{
 		Use:  "convert",
-		Args: cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			// TODO: argument
-			// TODO: flag to control output directory
-			objects, err := unstructured.FromDir("./bundle/manifests")
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			inputDir := args[0]
+
+			info, err := os.Stat(inputDir)
+			if err != nil {
+				return fmt.Errorf("failed to stat the %s input directory: %s", inputDir, err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("failed to stat the %s input directory: input is not a directory", inputDir)
+			}
+			objects, err := unstructured.FromDir(inputDir)
 			if err != nil {
 				return err
 			}
