@@ -16,16 +16,20 @@ import (
 )
 
 const (
+	// TODO: avoid hardcoding the install namespace
 	installNamespace = "rukpak-system"
-	// TODO: flag to control output directory
-	outputDir = "./plain"
+	defaultOutputDir = "plain"
 )
 
 var (
+	// TODO: avoid hardcoding the target namespaces
 	targetNamespaces = []string{}
 )
 
 func main() {
+	var (
+		outputDir string
+	)
 	cmd := &cobra.Command{
 		Use:  "convert",
 		Args: cobra.ExactArgs(1),
@@ -99,6 +103,8 @@ func main() {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&outputDir, "output-dir", defaultOutputDir, "Configures the directory that will contain the outputted set of decomposed bundle manifests")
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
