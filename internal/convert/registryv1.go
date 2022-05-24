@@ -14,6 +14,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,10 +55,43 @@ func validateTargetNamespaces(supportedInstallModes sets.String, installNamespac
 	return fmt.Errorf("supported install modes %v do not support target namespaces %v", supportedInstallModes.List(), targetNamespaces)
 }
 
-func Convert(in RegistryV1, installNamespace string, targetNamespaces []string) (*Plain, error) {
-	if installNamespace == "" {
-		installNamespace = in.CSV.Annotations["operatorframework.io/suggested-namespace"]
+func Convert(objects []*unstructured.Unstructured, installNamespace string, targetNamespaces []string) (*Plain, error) {
+	var (
+		reg RegistryV1
+	)
+	// TODO: this implementation is a bit wonky
+	for _, obj := range objects {
+		obj := obj
+
+		switch obj.GetObjectKind().GroupVersionKind().Kind {
+		case "ClusterServiceVersion":
+			csv := v1alpha1.ClusterServiceVersion{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &csv); err != nil {
+				return nil, err
+			}
+			if ns, ok := csv.Annotations["operatorframework.io/suggested-namespace"]; ok {
+				installNamespace = ns
+			}
+			csv.SetNamespace(installNamespace)
+			reg.CSV = csv
+		case "CustomResourceDefinition":
+			crd := apiextensionsv1.CustomResourceDefinition{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &crd); err != nil {
+				return nil, err
+			}
+			reg.CRDs = append(reg.CRDs, crd)
+		default:
+			reg.Others = append(reg.Others)
+		}
 	}
+	objs, err := RegistryV1ToPlain(reg, installNamespace, targetNamespaces)
+	if err != nil {
+		return nil, err
+	}
+	return objs, nil
+}
+
+func RegistryV1ToPlain(in RegistryV1, installNamespace string, targetNamespaces []string) (*Plain, error) {
 	supportedInstallModes := sets.NewString()
 	for _, im := range in.CSV.Spec.InstallModes {
 		if im.Supported {
